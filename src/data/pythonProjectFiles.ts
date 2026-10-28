@@ -151,6 +151,182 @@ class RPNStack:
 `
   },
   {
+    name: "audio.py",
+    path: "src/calculadora_rpn/audio.py",
+    language: "python",
+    description: "Módulo de síntese sonora que reproduz timbres idênticos à versão web usando apenas a biblioteca padrão.",
+    highlights: [
+      {
+        title: "Timbres Idênticos à Web",
+        explanation: "Sintetiza ondas senoidais para cliques, arpejos para ENTER e ondas dente de serra para avisos."
+      },
+      {
+        title: "Zero Dependências Externas",
+        explanation: "Utiliza os módulos wave, math e struct nativos do Python com winsound no Windows e aplay/afplay/bell no Linux/Mac."
+      },
+      {
+        title: "Execução Assíncrona Não-Bloqueante",
+        explanation: "Os efeitos são disparados em threads daemon para nunca congelar a interface gráfica do Tkinter."
+      }
+    ],
+    content: `"""
+Módulo de efeitos sonoros sintetizados para a Calculadora RPN em Python.
+Gera e reproduz timbres sonoros idênticos à versão web (Web Audio API)
+utilizando exclusivamente a biblioteca padrão do Python (sem dependências externas).
+"""
+
+import io
+import math
+import os
+import platform
+import struct
+import subprocess
+import tempfile
+import threading
+import wave
+from typing import Dict, Optional
+
+# Tenta carregar winsound no Windows
+try:
+    if platform.system() == "Windows":
+        import winsound
+    else:
+        winsound = None
+except Exception:
+    winsound = None
+
+
+def generate_tone_wav(freq: float, duration_ms: int, waveform: str = "sine", end_freq: Optional[float] = None) -> bytes:
+    """Gera um arquivo WAV de 16-bit mono em memória."""
+    sample_rate = 22050
+    total_samples = int(sample_rate * (duration_ms / 1000.0))
+    buffer = io.BytesIO()
+
+    with wave.open(buffer, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+
+        frames = bytearray()
+        for i in range(total_samples):
+            t = i / sample_rate
+            progress = i / total_samples
+
+            current_freq = freq + (end_freq - freq) * progress if end_freq else freq
+            envelope = math.exp(-3.5 * progress)
+
+            if waveform == "triangle":
+                phase = (t * current_freq) % 1.0
+                sample_val = (4.0 * abs(phase - 0.5) - 1.0)
+            elif waveform == "sawtooth":
+                phase = (t * current_freq) % 1.0
+                sample_val = (2.0 * phase - 1.0)
+            else:
+                sample_val = math.sin(2.0 * math.pi * current_freq * t)
+
+            amplitude = int(32767 * 0.4 * envelope * sample_val)
+            amplitude = max(-32768, min(32767, amplitude))
+            frames.extend(struct.pack("<h", amplitude))
+
+        wav_file.writeframes(frames)
+
+    return buffer.getvalue()
+
+
+class SoundManager:
+    """Gerenciador de áudio multiplataforma com timbres idênticos ao demo Web."""
+
+    def __init__(self, root_tk=None) -> None:
+        self.root_tk = root_tk
+        self.is_muted = False
+        self.os_name = platform.system()
+        self._wav_cache: Dict[str, bytes] = {}
+        self._temp_files: Dict[str, str] = {}
+
+        try:
+            self._wav_cache["num"] = generate_tone_wav(440.0, 45, "sine")
+            self._wav_cache["enter"] = generate_tone_wav(587.33, 90, "triangle", end_freq=880.0)
+            self._wav_cache["op"] = generate_tone_wav(659.25, 60, "sine")
+            self._wav_cache["clear"] = generate_tone_wav(320.0, 80, "sawtooth")
+            self._wav_cache["error"] = generate_tone_wav(180.0, 160, "sawtooth", end_freq=120.0)
+        except Exception:
+            pass
+
+    def toggle_mute(self) -> bool:
+        """Alterna entre mudo e ativo. Retorna True se o som estiver ATIVO."""
+        self.is_muted = not self.is_muted
+        if not self.is_muted:
+            self.play("enter")
+        return not self.is_muted
+
+    def play(self, sound_type: str = "num") -> None:
+        """Reproduz o som de forma assíncrona sem travar a interface gráfica."""
+        if self.is_muted:
+            return
+
+        threading.Thread(target=self._play_worker, args=(sound_type,), daemon=True).start()
+
+    def _play_worker(self, sound_type: str) -> None:
+        try:
+            if winsound is not None:
+                wav_bytes = self._wav_cache.get(sound_type)
+                if wav_bytes:
+                    winsound.PlaySound(wav_bytes, winsound.SND_MEMORY | winsound.SND_ASYNC)
+                    return
+                freq_map = {"num": 880, "enter": 1174, "op": 1318, "clear": 520, "error": 300}
+                winsound.Beep(freq_map.get(sound_type, 880), 30)
+                return
+
+            if self.os_name == "Darwin":
+                temp_path = self._get_temp_wav(sound_type)
+                if temp_path and os.path.exists(temp_path):
+                    subprocess.run(["afplay", temp_path], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    return
+
+            if self.os_name == "Linux":
+                temp_path = self._get_temp_wav(sound_type)
+                if temp_path and os.path.exists(temp_path):
+                    for player in ["aplay", "paplay"]:
+                        res = subprocess.run([player, "-q", temp_path], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        if res.returncode == 0:
+                            return
+
+            if self.root_tk:
+                self.root_tk.bell()
+        except Exception:
+            try:
+                if self.root_tk:
+                    self.root_tk.bell()
+            except Exception:
+                pass
+
+    def _get_temp_wav(self, sound_type: str) -> Optional[str]:
+        if sound_type in self._temp_files:
+            return self._temp_files[sound_type]
+
+        wav_bytes = self._wav_cache.get(sound_type)
+        if not wav_bytes:
+            return None
+
+        try:
+            temp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+            temp.write(wav_bytes)
+            temp.close()
+            self._temp_files[sound_type] = temp.name
+            return temp.name
+        except Exception:
+            return None
+
+    def cleanup(self) -> None:
+        for path in self._temp_files.values():
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except Exception:
+                pass
+`
+  },
+  {
     name: "gui.py",
     path: "src/calculadora_rpn/gui.py",
     language: "python",
@@ -175,22 +351,23 @@ class RPNStack:
     ],
     content: `"""
 Interface Gráfica (GUI) para a Calculadora RPN de 5 Níveis usando tkinter.
-Desenvolvida com foco em simplicidade, elegância e facilidade de manutenção.
+Desenvolvida com foco em simplicidade, elegância, feedback sonoro e facilidade de manutenção.
 """
 
 import tkinter as tk
 from tkinter import ttk
 from typing import Optional
 from calculadora_rpn.stack import RPNStack
+from calculadora_rpn.audio import SoundManager
 
 
 class RPNCalculatorGUI:
-    """Interface gráfica simples e organizada para calculadora RPN."""
+    """Interface gráfica simples e organizada para calculadora RPN com som idêntico à web."""
 
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Calculadora RPN (5 Níveis)")
-        self.root.geometry("380x620")
+        self.root.geometry("380x630")
         self.root.resizable(False, False)
 
         # Configura tema e cores modernas
@@ -206,6 +383,9 @@ class RPNCalculatorGUI:
         # Instância do motor de pilha RPN
         self.stack = RPNStack()
 
+        # Gerenciador de som sintetizado (idêntico à versão Web)
+        self.sound_mgr = SoundManager(self.root)
+
         # Controle de estado de entrada do usuário
         self.is_entering_number = False
         self.current_entry = ""
@@ -218,6 +398,9 @@ class RPNCalculatorGUI:
         self._build_keypad()
         self._bind_keyboard()
 
+        # Encerramento seguro da janela e limpeza de buffers
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
         # Atualiza o display inicial
         self._refresh_display()
 
@@ -226,13 +409,37 @@ class RPNCalculatorGUI:
         style = ttk.Style()
         style.theme_use("clam")
 
+    def _play_sound(self, sound_type: str = "num") -> None:
+        """Emite feedback sonoro tátil idêntico à versão web."""
+        self.sound_mgr.play(sound_type)
+
+    def _toggle_sound(self) -> None:
+        """Ativa/desativa os efeitos sonoros."""
+        is_active = self.sound_mgr.toggle_mute()
+        if is_active:
+            self.btn_sound.config(text="🔊 Som Ativo", fg=self.success_color)
+            self.status_var.set("Sons ativados (timbres Web Audio).")
+        else:
+            self.btn_sound.config(text="🔇 Mudo", fg="#9399b2")
+            self.status_var.set("Sons desativados.")
+
+    def _on_close(self) -> None:
+        """Libera arquivos temporários e fecha o app."""
+        try:
+            self.sound_mgr.cleanup()
+        finally:
+            self.root.destroy()
+
     def _build_header(self) -> None:
-        """Cabeçalho simples com título e descrição do modo RPN."""
+        """Cabeçalho simples com título e botão de alternar som."""
         header_frame = tk.Frame(self.root, bg=self.bg_color)
         header_frame.pack(fill=tk.X, padx=16, pady=(12, 6))
 
+        title_col = tk.Frame(header_frame, bg=self.bg_color)
+        title_col.pack(side=tk.LEFT, anchor="w")
+
         title = tk.Label(
-            header_frame,
+            title_col,
             text="Calculadora RPN",
             font=("Helvetica", 14, "bold"),
             fg=self.text_color,
@@ -241,13 +448,30 @@ class RPNCalculatorGUI:
         title.pack(anchor="w")
 
         subtitle = tk.Label(
-            header_frame,
+            title_col,
             text="Notação Polonesa Reversa • Pilha de 5 Níveis",
             font=("Helvetica", 9),
             fg="#a6adc8",
             bg=self.bg_color,
         )
         subtitle.pack(anchor="w")
+
+        # Botão de Som
+        self.btn_sound = tk.Button(
+            header_frame,
+            text="🔊 Som Ativo",
+            command=self._toggle_sound,
+            font=("Helvetica", 8, "bold"),
+            bg="#313244",
+            fg=self.success_color,
+            activebackground="#45475a",
+            relief=tk.FLAT,
+            bd=0,
+            padx=8,
+            pady=4,
+            cursor="hand2",
+        )
+        self.btn_sound.pack(side=tk.RIGHT, anchor="e")
 
     def _build_stack_display(self) -> None:
         """Área que exibe os 5 níveis da pilha (Nível 5 até Nível 1)."""
@@ -431,10 +655,11 @@ class RPNCalculatorGUI:
         self.root.bind("<BackSpace>", lambda e: self._on_backspace())
         self.root.bind("<Escape>", lambda e: self._on_clear())
 
-    # --- Lógica de Eventos e Manipulação de Estado ---
+    # --- Lógica de Eventos e Feedback Sonoro ---
 
     def _on_digit(self, digit: str) -> None:
-        """Adiciona um dígito numérico ao buffer atual."""
+        """Adiciona um dígito numérico ao buffer atual com som."""
+        self._play_sound("num")
         if not self.is_entering_number:
             self.current_entry = digit
             self.is_entering_number = True
@@ -447,7 +672,8 @@ class RPNCalculatorGUI:
         self.status_var.set("Digitando valor para o Nível 1...")
 
     def _on_dot(self) -> None:
-        """Insere ponto decimal se ainda não existir."""
+        """Insere ponto decimal se ainda não existir com som."""
+        self._play_sound("num")
         if not self.is_entering_number:
             self.current_entry = "0."
             self.is_entering_number = True
@@ -459,7 +685,8 @@ class RPNCalculatorGUI:
         self._refresh_display()
 
     def _on_toggle_sign(self) -> None:
-        """Inverte o sinal (+ / -) do valor no Nível 1."""
+        """Inverte o sinal (+ / -) do valor no Nível 1 com som."""
+        self._play_sound("num")
         if self.is_entering_number and self.current_entry:
             if self.current_entry.startswith("-"):
                 self.current_entry = self.current_entry[1:]
@@ -474,6 +701,7 @@ class RPNCalculatorGUI:
 
     def _on_backspace(self) -> None:
         """Apaga o último dígito digitado."""
+        self._play_sound("num")
         if self.is_entering_number and len(self.current_entry) > 0:
             self.current_entry = self.current_entry[:-1]
             val = float(self.current_entry) if self.current_entry and self.current_entry != "-" else 0.0
@@ -481,7 +709,8 @@ class RPNCalculatorGUI:
             self._refresh_display()
 
     def _on_enter(self) -> None:
-        """Confirma a entrada do número e empilha (duplica L1 para L2)."""
+        """Confirma a entrada do número e empilha com som harmônico."""
+        self._play_sound("enter")
         self.stack.enter()
         self.is_entering_number = False
         self.current_entry = ""
@@ -489,21 +718,25 @@ class RPNCalculatorGUI:
         self.status_var.set("ENTER: Valor empurrado para o Nível 2.")
 
     def _on_operator(self, op: str) -> None:
-        """Executa uma das 4 operações aritméticas básicas."""
+        """Executa uma das 4 operações aritméticas básicas com som."""
         self.is_entering_number = False
         self.current_entry = ""
         try:
             res = self.stack.execute_op(op)
+            self._play_sound("op")
             self._refresh_display()
             op_names = {"+": "Soma", "-": "Subtração", "*": "Multiplicação", "/": "Divisão"}
             self.status_var.set(f"{op_names.get(op, op)} realizada com sucesso!")
         except ZeroDivisionError as err:
+            self._play_sound("error")
             self.status_var.set(f"Aviso: {err}")
         except Exception as err:
+            self._play_sound("error")
             self.status_var.set(f"Erro: {err}")
 
     def _on_swap(self) -> None:
-        """Troca o Nível 1 e o Nível 2."""
+        """Troca o Nível 1 e o Nível 2 com som."""
+        self._play_sound("num")
         self.is_entering_number = False
         self.current_entry = ""
         self.stack.swap_xy()
@@ -511,7 +744,8 @@ class RPNCalculatorGUI:
         self.status_var.set("SWAP: Nível 1 e Nível 2 trocados.")
 
     def _on_drop(self) -> None:
-        """Descarta o Nível 1."""
+        """Descarta o Nível 1 com som."""
+        self._play_sound("clear")
         self.is_entering_number = False
         self.current_entry = ""
         self.stack.drop()
@@ -519,7 +753,8 @@ class RPNCalculatorGUI:
         self.status_var.set("DROP: Nível 1 descartado.")
 
     def _on_clear(self) -> None:
-        """Limpa toda a pilha de 5 níveis."""
+        """Limpa toda a pilha de 5 níveis com som."""
+        self._play_sound("clear")
         self.is_entering_number = False
         self.current_entry = ""
         self.stack.clear()
@@ -1065,18 +1300,21 @@ def build() -> None:
         cmd.extend(["--name", "calculadora-rpn"])
         expected_output = os.path.join("dist", "calculadora-rpn")
 
-    print(f"[*] Executando comando de compilação:")
-    print(f"    {' '.join(cmd)}\n")
+    print("[*] Executando comando de compilação:")
+    print("    " + " ".join(cmd))
+    print()
 
     result = subprocess.run(cmd)
 
     if result.returncode == 0:
-        print("\n" + "=" * 60)
+        print()
+        print("=" * 60)
         print("[+] SUCESSO! Executável nativo gerado com sucesso!")
         print(f"[+] Arquivo pronto em: {expected_output}")
         print("=" * 60)
     else:
-        print(f"\n[-] Erro durante a geração do executável (código de retorno: {result.returncode}).")
+        print()
+        print(f"[-] Erro durante a geração do executável (código de retorno: {result.returncode}).")
         sys.exit(result.returncode)
 
 

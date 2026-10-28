@@ -1,21 +1,22 @@
 """
 Interface Gráfica (GUI) para a Calculadora RPN de 5 Níveis usando tkinter.
-Desenvolvida com foco em simplicidade, elegância e facilidade de manutenção.
+Desenvolvida com foco em simplicidade, elegância, feedback sonoro e facilidade de manutenção.
 """
 
 import tkinter as tk
 from tkinter import ttk
 from typing import Optional
 from calculadora_rpn.stack import RPNStack
+from calculadora_rpn.audio import SoundManager
 
 
 class RPNCalculatorGUI:
-    """Interface gráfica simples e organizada para calculadora RPN."""
+    """Interface gráfica simples e organizada para calculadora RPN com som idêntico à web."""
 
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Calculadora RPN (5 Níveis)")
-        self.root.geometry("380x620")
+        self.root.geometry("380x630")
         self.root.resizable(False, False)
 
         # Configura tema e cores modernas
@@ -31,6 +32,9 @@ class RPNCalculatorGUI:
         # Instância do motor de pilha RPN
         self.stack = RPNStack()
 
+        # Gerenciador de som sintetizado (idêntico à versão Web)
+        self.sound_mgr = SoundManager(self.root)
+
         # Controle de estado de entrada do usuário
         self.is_entering_number = False
         self.current_entry = ""
@@ -43,6 +47,9 @@ class RPNCalculatorGUI:
         self._build_keypad()
         self._bind_keyboard()
 
+        # Encerramento seguro da janela e limpeza de buffers
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
         # Atualiza o display inicial
         self._refresh_display()
 
@@ -51,13 +58,37 @@ class RPNCalculatorGUI:
         style = ttk.Style()
         style.theme_use("clam")
 
+    def _play_sound(self, sound_type: str = "num") -> None:
+        """Emite feedback sonoro tátil idêntico à versão web."""
+        self.sound_mgr.play(sound_type)
+
+    def _toggle_sound(self) -> None:
+        """Ativa/desativa os efeitos sonoros."""
+        is_active = self.sound_mgr.toggle_mute()
+        if is_active:
+            self.btn_sound.config(text="🔊 Som Ativo", fg=self.success_color)
+            self.status_var.set("Sons ativados (timbres Web Audio).")
+        else:
+            self.btn_sound.config(text="🔇 Mudo", fg="#9399b2")
+            self.status_var.set("Sons desativados.")
+
+    def _on_close(self) -> None:
+        """Libera arquivos temporários e fecha o app."""
+        try:
+            self.sound_mgr.cleanup()
+        finally:
+            self.root.destroy()
+
     def _build_header(self) -> None:
-        """Cabeçalho simples com título e descrição do modo RPN."""
+        """Cabeçalho simples com título e botão de alternar som."""
         header_frame = tk.Frame(self.root, bg=self.bg_color)
         header_frame.pack(fill=tk.X, padx=16, pady=(12, 6))
 
+        title_col = tk.Frame(header_frame, bg=self.bg_color)
+        title_col.pack(side=tk.LEFT, anchor="w")
+
         title = tk.Label(
-            header_frame,
+            title_col,
             text="Calculadora RPN",
             font=("Helvetica", 14, "bold"),
             fg=self.text_color,
@@ -66,13 +97,30 @@ class RPNCalculatorGUI:
         title.pack(anchor="w")
 
         subtitle = tk.Label(
-            header_frame,
+            title_col,
             text="Notação Polonesa Reversa • Pilha de 5 Níveis",
             font=("Helvetica", 9),
             fg="#a6adc8",
             bg=self.bg_color,
         )
         subtitle.pack(anchor="w")
+
+        # Botão de Som
+        self.btn_sound = tk.Button(
+            header_frame,
+            text="🔊 Som Ativo",
+            command=self._toggle_sound,
+            font=("Helvetica", 8, "bold"),
+            bg="#313244",
+            fg=self.success_color,
+            activebackground="#45475a",
+            relief=tk.FLAT,
+            bd=0,
+            padx=8,
+            pady=4,
+            cursor="hand2",
+        )
+        self.btn_sound.pack(side=tk.RIGHT, anchor="e")
 
     def _build_stack_display(self) -> None:
         """Área que exibe os 5 níveis da pilha (Nível 5 até Nível 1)."""
@@ -88,7 +136,6 @@ class RPNCalculatorGUI:
 
         self.level_labels = {}
 
-        # Criamos as linhas do nível 5 ao nível 1
         level_names = [
             (5, "Nível 5 (U)"),
             (4, "Nível 4 (T)"),
@@ -149,7 +196,6 @@ class RPNCalculatorGUI:
         pad_frame = tk.Frame(self.root, bg=self.bg_color)
         pad_frame.pack(fill=tk.BOTH, expand=True, padx=16, pady=(0, 12))
 
-        # Configura as 4 colunas de tamanho igual
         for col in range(4):
             pad_frame.columnconfigure(col, weight=1, uniform="pad_col")
 
@@ -199,7 +245,6 @@ class RPNCalculatorGUI:
         btn_enter = self._create_button(pad_frame, "ENTER ↵", self._on_enter, "#a6e3a1", "#11111b", bold=True)
         btn_enter.grid(row=4, column=3, sticky="nsew", padx=3, pady=3)
 
-        # Configura proporção das linhas do teclado
         for row in range(5):
             pad_frame.rowconfigure(row, weight=1)
 
@@ -256,10 +301,11 @@ class RPNCalculatorGUI:
         self.root.bind("<BackSpace>", lambda e: self._on_backspace())
         self.root.bind("<Escape>", lambda e: self._on_clear())
 
-    # --- Lógica de Eventos e Manipulação de Estado ---
+    # --- Lógica de Eventos e Feedback Sonoro ---
 
     def _on_digit(self, digit: str) -> None:
-        """Adiciona um dígito numérico ao buffer atual."""
+        """Adiciona um dígito numérico ao buffer atual com som."""
+        self._play_sound("num")
         if not self.is_entering_number:
             self.current_entry = digit
             self.is_entering_number = True
@@ -272,7 +318,8 @@ class RPNCalculatorGUI:
         self.status_var.set("Digitando valor para o Nível 1...")
 
     def _on_dot(self) -> None:
-        """Insere ponto decimal se ainda não existir."""
+        """Insere ponto decimal se ainda não existir com som."""
+        self._play_sound("num")
         if not self.is_entering_number:
             self.current_entry = "0."
             self.is_entering_number = True
@@ -284,7 +331,8 @@ class RPNCalculatorGUI:
         self._refresh_display()
 
     def _on_toggle_sign(self) -> None:
-        """Inverte o sinal (+ / -) do valor no Nível 1."""
+        """Inverte o sinal (+ / -) do valor no Nível 1 com som."""
+        self._play_sound("num")
         if self.is_entering_number and self.current_entry:
             if self.current_entry.startswith("-"):
                 self.current_entry = self.current_entry[1:]
@@ -299,6 +347,7 @@ class RPNCalculatorGUI:
 
     def _on_backspace(self) -> None:
         """Apaga o último dígito digitado."""
+        self._play_sound("num")
         if self.is_entering_number and len(self.current_entry) > 0:
             self.current_entry = self.current_entry[:-1]
             val = float(self.current_entry) if self.current_entry and self.current_entry != "-" else 0.0
@@ -306,7 +355,8 @@ class RPNCalculatorGUI:
             self._refresh_display()
 
     def _on_enter(self) -> None:
-        """Confirma a entrada do número e empilha (duplica L1 para L2)."""
+        """Confirma a entrada do número e empilha com som harmônico."""
+        self._play_sound("enter")
         self.stack.enter()
         self.is_entering_number = False
         self.current_entry = ""
@@ -314,21 +364,25 @@ class RPNCalculatorGUI:
         self.status_var.set("ENTER: Valor empurrado para o Nível 2.")
 
     def _on_operator(self, op: str) -> None:
-        """Executa uma das 4 operações aritméticas básicas."""
+        """Executa uma das 4 operações aritméticas básicas com som."""
         self.is_entering_number = False
         self.current_entry = ""
         try:
             res = self.stack.execute_op(op)
+            self._play_sound("op")
             self._refresh_display()
             op_names = {"+": "Soma", "-": "Subtração", "*": "Multiplicação", "/": "Divisão"}
             self.status_var.set(f"{op_names.get(op, op)} realizada com sucesso!")
         except ZeroDivisionError as err:
+            self._play_sound("error")
             self.status_var.set(f"Aviso: {err}")
         except Exception as err:
+            self._play_sound("error")
             self.status_var.set(f"Erro: {err}")
 
     def _on_swap(self) -> None:
-        """Troca o Nível 1 e o Nível 2."""
+        """Troca o Nível 1 e o Nível 2 com som."""
+        self._play_sound("num")
         self.is_entering_number = False
         self.current_entry = ""
         self.stack.swap_xy()
@@ -336,7 +390,8 @@ class RPNCalculatorGUI:
         self.status_var.set("SWAP: Nível 1 e Nível 2 trocados.")
 
     def _on_drop(self) -> None:
-        """Descarta o Nível 1."""
+        """Descarta o Nível 1 com som."""
+        self._play_sound("clear")
         self.is_entering_number = False
         self.current_entry = ""
         self.stack.drop()
@@ -344,7 +399,8 @@ class RPNCalculatorGUI:
         self.status_var.set("DROP: Nível 1 descartado.")
 
     def _on_clear(self) -> None:
-        """Limpa toda a pilha de 5 níveis."""
+        """Limpa toda a pilha de 5 níveis com som."""
+        self._play_sound("clear")
         self.is_entering_number = False
         self.current_entry = ""
         self.stack.clear()
@@ -352,10 +408,9 @@ class RPNCalculatorGUI:
         self.status_var.set("CLEAR: Pilha de 5 níveis reiniciada.")
 
     def _format_number(self, num: float) -> str:
-        """Formata o número para evitar notação feia com muitos zeros."""
+        """Formata o número para evitar notação com excesso de zeros."""
         if num == int(num):
             return str(int(num))
-        # Limita a 6 casas decimais se necessário
         formatted = f"{num:.6f}".rstrip("0").rstrip(".")
         return formatted
 

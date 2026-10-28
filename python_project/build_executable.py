@@ -42,18 +42,21 @@ def build() -> None:
         cmd.extend(["--name", "calculadora-rpn"])
         expected_output = os.path.join("dist", "calculadora-rpn")
 
-    print(f"[*] Executando comando de compilação:")
-    print(f"    {' '.join(cmd)}\n")
+    print("[*] Executando comando de compilação:")
+    print("    " + " ".join(cmd))
+    print()
 
     result = subprocess.run(cmd)
 
     if result.returncode == 0:
-        print("\n" + "=" * 60)
+        print()
+        print("=" * 60)
         print("[+] SUCESSO! Executável nativo gerado com sucesso!")
         print(f"[+] Arquivo pronto em: {expected_output}")
         print("=" * 60)
     else:
-        print(f"\n[-] Erro durante a geração do executável (código: {result.returncode}).")
+        print()
+        print(f"[-] Erro durante a geração do executável (código: {result.returncode}).")
         sys.exit(result.returncode)
 
 
