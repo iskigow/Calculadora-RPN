@@ -287,19 +287,19 @@ class RPNCalculatorGUI:
         btn.grid(row=row, column=col, sticky="nsew", padx=3, pady=3)
 
     def _bind_keyboard(self) -> None:
-        """Vincula atalhos do teclado para digitação rápida."""
+        """Vincula atalhos do teclado prevenindo o som de erro/ding nativo do Windows."""
         for digit in "0123456789":
-            self.root.bind(digit, lambda e, d=digit: self._on_digit(d))
+            self.root.bind(digit, lambda e, d=digit: (self._on_digit(d), "break")[1])
 
-        self.root.bind(".", lambda e: self._on_dot())
-        self.root.bind("<Return>", lambda e: self._on_enter())
-        self.root.bind("<KP_Enter>", lambda e: self._on_enter())
-        self.root.bind("+", lambda e: self._on_operator("+"))
-        self.root.bind("-", lambda e: self._on_operator("-"))
-        self.root.bind("*", lambda e: self._on_operator("*"))
-        self.root.bind("/", lambda e: self._on_operator("/"))
-        self.root.bind("<BackSpace>", lambda e: self._on_backspace())
-        self.root.bind("<Escape>", lambda e: self._on_clear())
+        self.root.bind(".", lambda e: (self._on_dot(), "break")[1])
+        self.root.bind("<Return>", lambda e: (self._on_enter(), "break")[1])
+        self.root.bind("<KP_Enter>", lambda e: (self._on_enter(), "break")[1])
+        self.root.bind("+", lambda e: (self._on_operator("+"), "break")[1])
+        self.root.bind("-", lambda e: (self._on_operator("-"), "break")[1])
+        self.root.bind("*", lambda e: (self._on_operator("*"), "break")[1])
+        self.root.bind("/", lambda e: (self._on_operator("/"), "break")[1])
+        self.root.bind("<BackSpace>", lambda e: (self._on_backspace(), "break")[1])
+        self.root.bind("<Escape>", lambda e: (self._on_clear(), "break")[1])
 
     # --- Lógica de Eventos e Feedback Sonoro ---
 

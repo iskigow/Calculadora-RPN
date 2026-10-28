@@ -234,7 +234,7 @@ def generate_tone_wav(freq: float, duration_ms: int, waveform: str = "sine", end
 
 
 class SoundManager:
-    """Gerenciador de áudio multiplataforma com timbres idênticos ao demo Web."""
+    """Gerenciador de áudio multiplataforma com timbres sintetizados puros."""
 
     def __init__(self, root_tk=None) -> None:
         self.root_tk = root_tk
@@ -242,6 +242,14 @@ class SoundManager:
         self.os_name = platform.system()
         self._wav_cache: Dict[str, bytes] = {}
         self._temp_files: Dict[str, str] = {}
+
+        self._beep_presets = {
+            "num": [(520, 25)],
+            "enter": [(587, 40), (880, 50)],
+            "op": [(659, 45)],
+            "clear": [(330, 50)],
+            "error": [(220, 60), (140, 70)],
+        }
 
         try:
             self._wav_cache["num"] = generate_tone_wav(440.0, 45, "sine")
@@ -269,12 +277,9 @@ class SoundManager:
     def _play_worker(self, sound_type: str) -> None:
         try:
             if winsound is not None:
-                wav_bytes = self._wav_cache.get(sound_type)
-                if wav_bytes:
-                    winsound.PlaySound(wav_bytes, winsound.SND_MEMORY | winsound.SND_ASYNC)
-                    return
-                freq_map = {"num": 880, "enter": 1174, "op": 1318, "clear": 520, "error": 300}
-                winsound.Beep(freq_map.get(sound_type, 880), 30)
+                tones = self._beep_presets.get(sound_type, [(520, 25)])
+                for freq, duration in tones:
+                    winsound.Beep(freq, duration)
                 return
 
             if self.os_name == "Darwin":
@@ -290,15 +295,8 @@ class SoundManager:
                         res = subprocess.run([player, "-q", temp_path], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                         if res.returncode == 0:
                             return
-
-            if self.root_tk:
-                self.root_tk.bell()
         except Exception:
-            try:
-                if self.root_tk:
-                    self.root_tk.bell()
-            except Exception:
-                pass
+            pass
 
     def _get_temp_wav(self, sound_type: str) -> Optional[str]:
         if sound_type in self._temp_files:
@@ -641,19 +639,19 @@ class RPNCalculatorGUI:
         btn.grid(row=row, column=col, sticky="nsew", padx=3, pady=3)
 
     def _bind_keyboard(self) -> None:
-        """Vincula atalhos do teclado para digitação rápida."""
+        """Vincula atalhos do teclado prevenindo o som de erro/ding nativo do Windows."""
         for digit in "0123456789":
-            self.root.bind(digit, lambda e, d=digit: self._on_digit(d))
+            self.root.bind(digit, lambda e, d=digit: (self._on_digit(d), "break")[1])
 
-        self.root.bind(".", lambda e: self._on_dot())
-        self.root.bind("<Return>", lambda e: self._on_enter())
-        self.root.bind("<KP_Enter>", lambda e: self._on_enter())
-        self.root.bind("+", lambda e: self._on_operator("+"))
-        self.root.bind("-", lambda e: self._on_operator("-"))
-        self.root.bind("*", lambda e: self._on_operator("*"))
-        self.root.bind("/", lambda e: self._on_operator("/"))
-        self.root.bind("<BackSpace>", lambda e: self._on_backspace())
-        self.root.bind("<Escape>", lambda e: self._on_clear())
+        self.root.bind(".", lambda e: (self._on_dot(), "break")[1])
+        self.root.bind("<Return>", lambda e: (self._on_enter(), "break")[1])
+        self.root.bind("<KP_Enter>", lambda e: (self._on_enter(), "break")[1])
+        self.root.bind("+", lambda e: (self._on_operator("+"), "break")[1])
+        self.root.bind("-", lambda e: (self._on_operator("-"), "break")[1])
+        self.root.bind("*", lambda e: (self._on_operator("*"), "break")[1])
+        self.root.bind("/", lambda e: (self._on_operator("/"), "break")[1])
+        self.root.bind("<BackSpace>", lambda e: (self._on_backspace(), "break")[1])
+        self.root.bind("<Escape>", lambda e: (self._on_clear(), "break")[1])
 
     # --- Lógica de Eventos e Feedback Sonoro ---
 
