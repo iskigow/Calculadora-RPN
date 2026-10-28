@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Calculator,
   Code2,
@@ -10,29 +10,99 @@ import {
   Layers,
   Sparkles,
   Info,
-  Package
+  Package,
+  Monitor,
+  Apple,
+  ChevronDown,
+  Check
 } from 'lucide-react';
 import { RPNCalculatorSimulator } from './components/RPNCalculatorSimulator';
 import { ProjectCodeViewer } from './components/ProjectCodeViewer';
 import { RPNTutorial } from './components/RPNTutorial';
 import { UvGuide } from './components/UvGuide';
 import { ExecutableGeneratorGuide } from './components/ExecutableGeneratorGuide';
-import { downloadPythonProjectZip } from './utils/zipExporter';
+import {
+  detectUserOS,
+  downloadWindowsExecutable,
+  downloadLinuxBinary,
+  downloadMacAppBundle,
+  downloadPythonProjectZip,
+  DownloadOption
+} from './utils/zipExporter';
 
 type TabType = 'simulator' | 'code' | 'tutorial' | 'uv' | 'executables';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('simulator');
-  const [downloadingZip, setDownloadingZip] = useState<boolean>(false);
+  const detectedOS = useMemo(() => detectUserOS(), []);
+  const [selectedFormat, setSelectedFormat] = useState<DownloadOption>(() => {
+    const os = detectUserOS();
+    if (os === 'windows') return 'windows';
+    if (os === 'linux') return 'linux';
+    if (os === 'macos') return 'macos';
+    return 'zip';
+  });
+  const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
+  const [isDownloading, setIsDownloading] = useState<boolean>(false);
 
-  const handleDownloadZip = async () => {
-    setDownloadingZip(true);
+  const formatConfig: Record<
+    DownloadOption,
+    {
+      label: string;
+      buttonText: string;
+      icon: React.ReactNode;
+      subtext: string;
+      osMatch: string | null;
+    }
+  > = {
+    windows: {
+      label: 'Executável Windows (.exe)',
+      buttonText: 'Baixar Executável (.exe)',
+      icon: <Monitor className="w-4 h-4 text-blue-300" />,
+      subtext: 'Pacote portátil para Windows com executável',
+      osMatch: 'windows'
+    },
+    linux: {
+      label: 'Binário Linux (ELF)',
+      buttonText: 'Baixar Binário (ELF)',
+      icon: <Terminal className="w-4 h-4 text-amber-300" />,
+      subtext: 'Binário executável ELF nativo para Linux',
+      osMatch: 'linux'
+    },
+    macos: {
+      label: 'App Bundle macOS (.app)',
+      buttonText: 'Baixar App Bundle (.app)',
+      icon: <Apple className="w-4 h-4 text-slate-200" />,
+      subtext: 'Pacote .app nativo para macOS',
+      osMatch: 'macos'
+    },
+    zip: {
+      label: 'Código Completo (.zip)',
+      buttonText: 'Baixar Projeto (.zip)',
+      icon: <FolderArchive className="w-4 h-4 text-emerald-300" />,
+      subtext: 'Código Python puro gerenciado com uv',
+      osMatch: null
+    }
+  };
+
+  const handleDownload = async (format?: DownloadOption) => {
+    const target = format || selectedFormat;
+    setIsDownloading(true);
+    setIsMenuOpen(false);
     try {
-      await downloadPythonProjectZip();
+      if (target === 'windows') {
+        await downloadWindowsExecutable();
+      } else if (target === 'linux') {
+        await downloadLinuxBinary();
+      } else if (target === 'macos') {
+        await downloadMacAppBundle();
+      } else {
+        await downloadPythonProjectZip();
+      }
     } catch (err) {
       console.error(err);
     } finally {
-      setDownloadingZip(false);
+      setIsDownloading(false);
     }
   };
 
@@ -63,20 +133,84 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-3">
-            <button
-              type="button"
-              onClick={handleDownloadZip}
-              disabled={downloadingZip}
-              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-emerald-950/60 cursor-pointer disabled:opacity-50"
-              title="Baixar projeto compactado pronto para rodar"
-            >
-              <FolderArchive className="w-4 h-4" />
-              <span className="hidden sm:inline">
-                {downloadingZip ? 'Baixando...' : 'Baixar Projeto Python (.zip)'}
-              </span>
-              <span className="sm:hidden">Baixar .zip</span>
-            </button>
+          <div className="flex items-center gap-2 sm:gap-3 relative">
+            <div className="inline-flex rounded-xl shadow-md shadow-emerald-950/60 bg-emerald-600 hover:bg-emerald-500 transition">
+              <button
+                type="button"
+                onClick={() => handleDownload()}
+                disabled={isDownloading}
+                className="px-3.5 py-2 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                title={`Baixar ${formatConfig[selectedFormat].label}`}
+              >
+                {formatConfig[selectedFormat].icon}
+                <span>
+                  {isDownloading ? 'Baixando...' : formatConfig[selectedFormat].buttonText}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsMenuOpen((prev) => !prev)}
+                className="px-2 py-2 border-l border-emerald-700/60 text-emerald-100 hover:text-white hover:bg-emerald-700/40 rounded-r-xl transition cursor-pointer"
+                title="Escolher outro formato (Windows, Linux, macOS ou ZIP)"
+              >
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
+
+            {/* Menu Dropdown de Formatos de Download */}
+            {isMenuOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setIsMenuOpen(false)}
+                />
+                <div className="absolute right-0 top-full mt-2 w-72 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl z-50 p-2 space-y-1">
+                  <div className="px-3 py-1.5 text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800/80 mb-1 flex items-center justify-between">
+                    <span>Opções de Download</span>
+                    <span className="text-emerald-400 font-semibold">SO: {detectedOS.toUpperCase()}</span>
+                  </div>
+
+                  {(Object.keys(formatConfig) as DownloadOption[]).map((fmt) => {
+                    const cfg = formatConfig[fmt];
+                    const isSelected = selectedFormat === fmt;
+                    const isSuggested = cfg.osMatch === detectedOS;
+
+                    return (
+                      <button
+                        key={fmt}
+                        type="button"
+                        onClick={() => {
+                          setSelectedFormat(fmt);
+                          handleDownload(fmt);
+                        }}
+                        className={`w-full text-left p-2.5 rounded-xl transition flex items-center justify-between text-xs cursor-pointer ${
+                          isSelected
+                            ? 'bg-emerald-950/60 border border-emerald-500/40 text-white'
+                            : 'hover:bg-slate-800/80 text-slate-300 border border-transparent'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 truncate">
+                          <span className="shrink-0">{cfg.icon}</span>
+                          <div className="truncate">
+                            <div className="font-semibold truncate flex items-center gap-1.5">
+                              <span>{cfg.label}</span>
+                              {isSuggested && (
+                                <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.2 rounded-full border border-emerald-500/30">
+                                  Seu SO
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-slate-400 truncate">{cfg.subtext}</div>
+                          </div>
+                        </div>
+                        {isSelected && <Check className="w-4 h-4 text-emerald-400 shrink-0 ml-1" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
         </div>
 

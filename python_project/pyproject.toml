@@ -1,0 +1,20 @@
+[project]
+name = "calculadora-rpn"
+version = "0.1.0"
+description = "Calculadora em Python com Notação Polonesa Reversa (RPN) de 5 níveis e interface gráfica"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+calculadora = "calculadora_rpn.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pyinstaller>=6.5.0",
+]
