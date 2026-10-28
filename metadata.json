@@ -1,0 +1,6 @@
+{
+  "name": "Calculadora RPN em Python com uv",
+  "description": "Calculadora de Notação Polonesa Reversa (RPN) em Python com pilha de 5 níveis, 4 operações aritméticas, interface gráfica e gestão de pacotes com uv.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
