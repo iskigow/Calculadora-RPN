@@ -16,7 +16,7 @@ class RPNCalculatorGUI:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Calculadora RPN (5 Níveis)")
-        self.root.geometry("380x630")
+        self.root.geometry("380x650")
         self.root.resizable(False, False)
 
         # Configura tema e cores modernas
@@ -209,31 +209,31 @@ class RPNCalculatorGUI:
         btn_swap = self._create_button(pad_frame, "SWAP", self._on_swap, "#cba6f7", "#11111b")
         btn_swap.grid(row=0, column=2, sticky="nsew", padx=3, pady=3)
 
-        btn_div = self._create_button(pad_frame, "÷", lambda: self._on_operator("/"), "#89b4fa", "#11111b")
-        btn_div.grid(row=0, column=3, sticky="nsew", padx=3, pady=3)
+        btn_pct = self._create_button(pad_frame, "%", self._on_percent, "#f9e2af", "#11111b", bold=True)
+        btn_pct.grid(row=0, column=3, sticky="nsew", padx=3, pady=3)
 
-        # Linha 1: 7, 8, 9, *
+        # Linha 1: 7, 8, 9, ÷
         self._create_num_button(pad_frame, "7", 1, 0)
         self._create_num_button(pad_frame, "8", 1, 1)
         self._create_num_button(pad_frame, "9", 1, 2)
-        btn_mul = self._create_button(pad_frame, "×", lambda: self._on_operator("*"), "#89b4fa", "#11111b")
-        btn_mul.grid(row=1, column=3, sticky="nsew", padx=3, pady=3)
+        btn_div = self._create_button(pad_frame, "÷", lambda: self._on_operator("/"), "#89b4fa", "#11111b")
+        btn_div.grid(row=1, column=3, sticky="nsew", padx=3, pady=3)
 
-        # Linha 2: 4, 5, 6, -
+        # Linha 2: 4, 5, 6, ×
         self._create_num_button(pad_frame, "4", 2, 0)
         self._create_num_button(pad_frame, "5", 2, 1)
         self._create_num_button(pad_frame, "6", 2, 2)
-        btn_sub = self._create_button(pad_frame, "−", lambda: self._on_operator("-"), "#89b4fa", "#11111b")
-        btn_sub.grid(row=2, column=3, sticky="nsew", padx=3, pady=3)
+        btn_mul = self._create_button(pad_frame, "×", lambda: self._on_operator("*"), "#89b4fa", "#11111b")
+        btn_mul.grid(row=2, column=3, sticky="nsew", padx=3, pady=3)
 
-        # Linha 3: 1, 2, 3, +
+        # Linha 3: 1, 2, 3, −
         self._create_num_button(pad_frame, "1", 3, 0)
         self._create_num_button(pad_frame, "2", 3, 1)
         self._create_num_button(pad_frame, "3", 3, 2)
-        btn_add = self._create_button(pad_frame, "+", lambda: self._on_operator("+"), "#89b4fa", "#11111b")
-        btn_add.grid(row=3, column=3, sticky="nsew", padx=3, pady=3)
+        btn_sub = self._create_button(pad_frame, "−", lambda: self._on_operator("-"), "#89b4fa", "#11111b")
+        btn_sub.grid(row=3, column=3, sticky="nsew", padx=3, pady=3)
 
-        # Linha 4: +/-, 0, ., ENTER
+        # Linha 4: ±, 0, ., +
         btn_sign = self._create_button(pad_frame, "±", self._on_toggle_sign, "#45475a", self.text_color)
         btn_sign.grid(row=4, column=0, sticky="nsew", padx=3, pady=3)
 
@@ -242,10 +242,14 @@ class RPNCalculatorGUI:
         btn_dot = self._create_button(pad_frame, ".", self._on_dot, "#45475a", self.text_color)
         btn_dot.grid(row=4, column=2, sticky="nsew", padx=3, pady=3)
 
-        btn_enter = self._create_button(pad_frame, "ENTER ↵", self._on_enter, "#a6e3a1", "#11111b", bold=True)
-        btn_enter.grid(row=4, column=3, sticky="nsew", padx=3, pady=3)
+        btn_add = self._create_button(pad_frame, "+", lambda: self._on_operator("+"), "#89b4fa", "#11111b")
+        btn_add.grid(row=4, column=3, sticky="nsew", padx=3, pady=3)
 
-        for row in range(5):
+        # Linha 5: ENTER ↵ (botão amplo com destaque)
+        btn_enter = self._create_button(pad_frame, "ENTER ↵", self._on_enter, "#a6e3a1", "#11111b", bold=True)
+        btn_enter.grid(row=5, column=0, columnspan=4, sticky="nsew", padx=3, pady=3)
+
+        for row in range(6):
             pad_frame.rowconfigure(row, weight=1)
 
     def _create_button(
@@ -298,6 +302,7 @@ class RPNCalculatorGUI:
         self.root.bind("-", lambda e: (self._on_operator("-"), "break")[1])
         self.root.bind("*", lambda e: (self._on_operator("*"), "break")[1])
         self.root.bind("/", lambda e: (self._on_operator("/"), "break")[1])
+        self.root.bind("%", lambda e: (self._on_percent(), "break")[1])
         self.root.bind("<BackSpace>", lambda e: (self._on_backspace(), "break")[1])
         self.root.bind("<Escape>", lambda e: (self._on_clear(), "break")[1])
 
@@ -376,6 +381,26 @@ class RPNCalculatorGUI:
         except ZeroDivisionError as err:
             self._play_sound("error")
             self.status_var.set(f"Aviso: {err}")
+        except Exception as err:
+            self._play_sound("error")
+            self.status_var.set(f"Erro: {err}")
+
+    def _on_percent(self) -> None:
+        """Calcula porcentagem: L1 = (L2 * L1) / 100 mantendo L2 como base, ou L1 / 100 se L2 for zero."""
+        self.is_entering_number = False
+        self.current_entry = ""
+        try:
+            val_x = self.stack.get_level(1)
+            val_y = self.stack.get_level(2)
+            res = self.stack.percent()
+            self._play_sound("op")
+            self._refresh_display()
+            if val_y != 0.0:
+                self.status_var.set(
+                    f"Porcentagem: {self._format_number(val_x)}% de {self._format_number(val_y)} = {self._format_number(res)} (Base em L2)"
+                )
+            else:
+                self.status_var.set(f"Porcentagem: {self._format_number(val_x)}% = {self._format_number(res)}")
         except Exception as err:
             self._play_sound("error")
             self.status_var.set(f"Erro: {err}")

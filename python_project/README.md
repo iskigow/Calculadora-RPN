@@ -34,6 +34,7 @@ O display exibe os 5 níveis da pilha simultaneamente de cima para baixo:
 ### Controles & Teclas Principais
 - **ENTER ↵**: Confirma o valor digitado no Nível 1 e o empurra para o Nível 2. Todos os níveis existentes sobem uma posição.
 - **+ , − , × , ÷**: Executam a operação aritmética entre o **Nível 2** (primeiro operando) e o **Nível 1** (segundo operando). O resultado substitui o Nível 1 e a pilha desce.
+- **% (Porcentagem)**: Convenção clássica HP RPN: calcula a porcentagem do Nível 2 (Y) usando a taxa do Nível 1 (X) (`(Y * X) / 100`). O valor base em Nível 2 permanece preservado, permitindo pressionar imediatamente `+` para acréscimo/taxa (ex: `200 ENTER 15 % + = 230`) ou `−` para desconto (ex: `200 ENTER 15 % − = 170`).
 - **SWAP (X⇄Y)**: Inverte os valores entre o Nível 1 e o Nível 2.
 - **DROP**: Descarta o valor atual do Nível 1; os níveis superiores descem.
 - **CLEAR**: Zera instantaneamente todos os 5 níveis da pilha.
@@ -44,6 +45,7 @@ Você pode utilizar o seu teclado numérico normal:
 - **0 a 9** e **.** : Digitação de números e decimais
 - **Enter** ou **NumPad Enter**: Tecla ENTER da pilha
 - **+**, **-**, **\***, **/** : Operações aritméticas imediatas
+- **%** : Operação de porcentagem
 - **Backspace**: Apagar último dígito digitado
 - **Escape (Esc)**: Limpar a pilha (CLEAR)
 

@@ -11,7 +11,8 @@ import {
   CheckCircle,
   AlertTriangle,
   History,
-  Info
+  Info,
+  Percent
 } from 'lucide-react';
 import { playKeyClick, toggleAudioMute, getIsAudioMuted } from '../utils/audio';
 
@@ -155,6 +156,36 @@ export const RPNCalculatorSimulator: React.FC = () => {
     });
   }, []);
 
+  const handlePercent = useCallback(() => {
+    setIsTyping(false);
+    setCurrentEntry('');
+
+    setLevels((lvl) => {
+      const valX = lvl[0]; // Nível 1 (taxa percentual)
+      const valY = lvl[1]; // Nível 2 (base)
+      let result = 0;
+
+      if (valY !== 0) {
+        // Ex: 200 ENTER 15 % -> 30, com base 200 preservada em L2
+        result = (valY * valX) / 100.0;
+        playKeyClick('op');
+        addLog('%', `${formatNumber(valX)}% de ${formatNumber(valY)} = ${formatNumber(result)} (Base mantida em L2)`);
+        setStatusMessage(`Porcentagem: ${formatNumber(valX)}% de ${formatNumber(valY)} = ${formatNumber(result)} (Pressione + ou −)`);
+        setStatusType('success');
+        // Mantém Nível 2 intacto para somar ou subtrair imediatamente (+ / -)
+        return [result, lvl[1], lvl[2], lvl[3], lvl[4]];
+      } else {
+        // Caso unário: X / 100
+        result = valX / 100.0;
+        playKeyClick('op');
+        addLog('%', `${formatNumber(valX)} / 100 = ${formatNumber(result)}`);
+        setStatusMessage(`Porcentagem: ${formatNumber(valX)}% = ${formatNumber(result)}`);
+        setStatusType('success');
+        return [result, lvl[1], lvl[2], lvl[3], lvl[4]];
+      }
+    });
+  }, []);
+
   const handleSwap = useCallback(() => {
     playKeyClick('num');
     setIsTyping(false);
@@ -234,6 +265,9 @@ export const RPNCalculatorSimulator: React.FC = () => {
       } else if (e.key === '/') {
         e.preventDefault();
         handleOperation('/');
+      } else if (e.key === '%') {
+        e.preventDefault();
+        handlePercent();
       } else if (e.key === 'Backspace') {
         e.preventDefault();
         handleBackspace();
@@ -245,10 +279,13 @@ export const RPNCalculatorSimulator: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleDigit, handleDot, handleEnter, handleOperation, handleBackspace, handleClear]);
+  }, [handleDigit, handleDot, handleEnter, handleOperation, handlePercent, handleBackspace, handleClear]);
 
   // Função para carregar exemplos interativos
-  const runExample = (steps: Array<{ val?: number; op?: '+' | '-' | '*' | '/'; action?: 'enter' | 'swap' }>, desc: string) => {
+  const runExample = (
+    steps: Array<{ val?: number; op?: '+' | '-' | '*' | '/'; action?: 'enter' | 'swap' | 'percent' }>,
+    desc: string
+  ) => {
     handleClear();
     setStatusMessage(`Executando exemplo: ${desc}...`);
     setStatusType('info');
@@ -273,6 +310,13 @@ export const RPNCalculatorSimulator: React.FC = () => {
         currentLvl = [currentLvl[0], currentLvl[0], currentLvl[1], currentLvl[2], currentLvl[3]];
         setLevels([...currentLvl]);
         addLog('ENTER', 'Empurrado para Nível 2');
+      } else if (step.action === 'percent') {
+        const x = currentLvl[0];
+        const y = currentLvl[1];
+        const r = y !== 0 ? (y * x) / 100.0 : x / 100.0;
+        currentLvl = [r, currentLvl[1], currentLvl[2], currentLvl[3], currentLvl[4]];
+        setLevels([...currentLvl]);
+        addLog('%', `${formatNumber(x)}% de ${formatNumber(y)} = ${formatNumber(r)} (Base mantida em L2)`);
       } else if (step.op) {
         const x = currentLvl[0];
         const y = currentLvl[1];
@@ -429,6 +473,27 @@ export const RPNCalculatorSimulator: React.FC = () => {
 
             <button
               type="button"
+              onClick={handlePercent}
+              className="py-3 px-2 rounded-xl bg-amber-400/20 hover:bg-amber-400/30 border border-amber-400/40 text-amber-300 font-bold text-xs tracking-wider transition active:scale-95 flex items-center justify-center gap-1 shadow-sm"
+              title="Porcentagem RPN (%): Calcula taxa de L2 mantendo L2 como base"
+            >
+              <Percent className="w-3.5 h-3.5" />
+              %
+            </button>
+
+            {/* Linha 2: 7, 8, 9, ÷ */}
+            {['7', '8', '9'].map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => handleDigit(d)}
+                className="py-3.5 rounded-xl bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-white font-bold text-lg transition active:scale-95 shadow-sm"
+              >
+                {d}
+              </button>
+            ))}
+            <button
+              type="button"
               onClick={() => handleOperation('/')}
               className="py-3 px-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-lg transition active:scale-95 shadow-md shadow-blue-900/30 flex items-center justify-center"
               title="Divisão: Nível 2 / Nível 1"
@@ -436,8 +501,8 @@ export const RPNCalculatorSimulator: React.FC = () => {
               ÷
             </button>
 
-            {/* Linha 2: 7, 8, 9, * */}
-            {['7', '8', '9'].map((d) => (
+            {/* Linha 3: 4, 5, 6, × */}
+            {['4', '5', '6'].map((d) => (
               <button
                 key={d}
                 type="button"
@@ -456,8 +521,8 @@ export const RPNCalculatorSimulator: React.FC = () => {
               ×
             </button>
 
-            {/* Linha 3: 4, 5, 6, - */}
-            {['4', '5', '6'].map((d) => (
+            {/* Linha 4: 1, 2, 3, − */}
+            {['1', '2', '3'].map((d) => (
               <button
                 key={d}
                 type="button"
@@ -476,27 +541,7 @@ export const RPNCalculatorSimulator: React.FC = () => {
               −
             </button>
 
-            {/* Linha 4: 1, 2, 3, + */}
-            {['1', '2', '3'].map((d) => (
-              <button
-                key={d}
-                type="button"
-                onClick={() => handleDigit(d)}
-                className="py-3.5 rounded-xl bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-white font-bold text-lg transition active:scale-95 shadow-sm"
-              >
-                {d}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => handleOperation('+')}
-              className="py-3 px-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-lg transition active:scale-95 shadow-md shadow-blue-900/30 flex items-center justify-center"
-              title="Soma: Nível 2 + Nível 1"
-            >
-              +
-            </button>
-
-            {/* Linha 5: +/-, 0, ., ENTER */}
+            {/* Linha 5: ±, 0, ., + */}
             <button
               type="button"
               onClick={handleToggleSign}
@@ -525,8 +570,18 @@ export const RPNCalculatorSimulator: React.FC = () => {
 
             <button
               type="button"
+              onClick={() => handleOperation('+')}
+              className="py-3 px-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-lg transition active:scale-95 shadow-md shadow-blue-900/30 flex items-center justify-center"
+              title="Soma: Nível 2 + Nível 1"
+            >
+              +
+            </button>
+
+            {/* Linha 6: ENTER ↵ (botão amplo com destaque) */}
+            <button
+              type="button"
               onClick={handleEnter}
-              className="py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm tracking-wide uppercase transition active:scale-95 shadow-lg shadow-emerald-900/40 flex items-center justify-center gap-1"
+              className="col-span-4 py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm tracking-wide uppercase transition active:scale-95 shadow-lg shadow-emerald-900/40 flex items-center justify-center gap-1"
               title="Confirmar entrada e empilhar para o Nível 2 (ENTER)"
             >
               ENTER ↵
@@ -536,7 +591,7 @@ export const RPNCalculatorSimulator: React.FC = () => {
           {/* Dica de Teclado Físico */}
           <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
             <span>💡 Dica: Use seu teclado numérico físico!</span>
-            <span className="font-mono bg-slate-800 px-2 py-0.5 rounded text-slate-300">Enter / Esc / + - * /</span>
+            <span className="font-mono bg-slate-800 px-2 py-0.5 rounded text-slate-300">Enter / Esc / % / + - * /</span>
           </div>
         </div>
       </div>
@@ -554,6 +609,56 @@ export const RPNCalculatorSimulator: React.FC = () => {
           </p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <button
+              type="button"
+              onClick={() =>
+                runExample(
+                  [
+                    { val: 200 },
+                    { action: 'enter' },
+                    { val: 15 },
+                    { action: 'percent' },
+                    { op: '+' },
+                  ],
+                  '200 + 15% (Acréscimo de 15%) = 230'
+                )
+              }
+              className="text-left p-3 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700 hover:border-amber-500/50 transition group"
+            >
+              <div className="flex items-center justify-between text-xs font-semibold text-white group-hover:text-amber-300">
+                <span>200 + 15% (Taxa)</span>
+                <Play className="w-3.5 h-3.5 text-amber-400" />
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1 font-mono">
+                200 ↵ 15 % + ➔ 230
+              </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                runExample(
+                  [
+                    { val: 150 },
+                    { action: 'enter' },
+                    { val: 20 },
+                    { action: 'percent' },
+                    { op: '-' },
+                  ],
+                  '150 - 20% (Desconto de 20%) = 120'
+                )
+              }
+              className="text-left p-3 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700 hover:border-amber-500/50 transition group"
+            >
+              <div className="flex items-center justify-between text-xs font-semibold text-white group-hover:text-amber-300">
+                <span>150 - 20% (Desconto)</span>
+                <Play className="w-3.5 h-3.5 text-amber-400" />
+              </div>
+              <div className="text-[11px] text-slate-400 mt-1 font-mono">
+                150 ↵ 20 % − ➔ 120
+              </div>
+            </button>
+
             <button
               type="button"
               onClick={() =>
@@ -607,39 +712,6 @@ export const RPNCalculatorSimulator: React.FC = () => {
                 100 ↵ 4 ↵ 5 * / ➔ 5
               </div>
             </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                runExample(
-                  [
-                    { val: 7 },
-                    { action: 'enter' },
-                    { val: 8 },
-                    { op: '+' },
-                    { action: 'enter' },
-                    { val: 9 },
-                    { op: '+' },
-                    { action: 'enter' },
-                    { val: 10 },
-                    { op: '+' },
-                    { action: 'enter' },
-                    { val: 4 },
-                    { op: '/' },
-                  ],
-                  'Média: (7+8+9+10) ÷ 4 = 8.5'
-                )
-              }
-              className="text-left p-3 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700 hover:border-emerald-500/50 transition group sm:col-span-2"
-            >
-              <div className="flex items-center justify-between text-xs font-semibold text-white group-hover:text-emerald-400">
-                <span>Média de 4 números: (7 + 8 + 9 + 10) ÷ 4</span>
-                <Play className="w-3.5 h-3.5 text-emerald-400" />
-              </div>
-              <div className="text-[11px] text-slate-400 mt-1 font-mono">
-                Soma em cadeia usando a pilha e divisão final por 4 ➔ 8.5
-              </div>
-            </button>
           </div>
         </div>
 
@@ -663,7 +735,7 @@ export const RPNCalculatorSimulator: React.FC = () => {
 
           {history.length === 0 ? (
             <div className="py-6 text-center text-slate-500 text-xs">
-              Nenhuma operação registrada ainda. Pressione dígitos, ENTER ou operações (+, -, *, /) para acompanhar.
+              Nenhuma operação registrada ainda. Pressione dígitos, ENTER ou operações (+, -, *, /, %) para acompanhar.
             </div>
           ) : (
             <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
@@ -696,12 +768,15 @@ export const RPNCalculatorSimulator: React.FC = () => {
               <strong className="text-emerald-400">ENTER:</strong> Duplica L1 para L2 e sobe os demais níveis.
             </div>
             <div>
+              <strong className="text-amber-400">% (Porcento):</strong> Taxa sobre base L2, mantendo L2 para + ou −.
+            </div>
+            <div>
               <strong className="text-purple-400">SWAP:</strong> Inverte os valores de X (L1) e Y (L2).
             </div>
             <div>
-              <strong className="text-amber-400">DROP:</strong> Descarta o Nível 1 e desce a pilha.
+              <strong className="text-orange-400">DROP:</strong> Descarta o Nível 1 e desce a pilha.
             </div>
-            <div>
+            <div className="col-span-2">
               <strong className="text-rose-400">CLEAR:</strong> Zera instantaneamente os 5 níveis da pilha.
             </div>
           </div>

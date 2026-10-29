@@ -126,6 +126,30 @@ class RPNStack:
         self._levels = [result] + self._levels[2:] + [0.0]
         return result
 
+    def percent(self) -> float:
+        """
+        Calcula a porcentagem segundo a convenção clássica RPN (HP):
+        - Nível 2 (Y) é o valor base.
+        - Nível 1 (X) é a taxa percentual.
+        - Resultado = (Y * X) / 100.0.
+        
+        O resultado é colocado no Nível 1 (X), mantendo o Nível 2 (Y) preservado.
+        Isso permite pressionar imediatamente [+] para somar acréscimo (ex: taxa/imposto)
+        ou [-] para subtrair desconto.
+        
+        Se o Nível 2 for 0.0, calcula a taxa unitária (X / 100.0).
+        """
+        val_x = self.get_level(1)
+        val_y = self.get_level(2)
+
+        if val_y != 0.0:
+            result = (val_y * val_x) / 100.0
+        else:
+            result = val_x / 100.0
+
+        self.set_level_1(result)
+        return result
+
     def enter(self) -> None:
         """
         Tecla ENTER: duplica o valor do Nível 1 para o Nível 2,
@@ -365,7 +389,7 @@ class RPNCalculatorGUI:
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.root.title("Calculadora RPN (5 Níveis)")
-        self.root.geometry("380x630")
+        self.root.geometry("380x650")
         self.root.resizable(False, False)
 
         # Configura tema e cores modernas
@@ -560,31 +584,31 @@ class RPNCalculatorGUI:
         btn_swap = self._create_button(pad_frame, "SWAP", self._on_swap, "#cba6f7", "#11111b")
         btn_swap.grid(row=0, column=2, sticky="nsew", padx=3, pady=3)
 
-        btn_div = self._create_button(pad_frame, "÷", lambda: self._on_operator("/"), "#89b4fa", "#11111b")
-        btn_div.grid(row=0, column=3, sticky="nsew", padx=3, pady=3)
+        btn_pct = self._create_button(pad_frame, "%", self._on_percent, "#f9e2af", "#11111b", bold=True)
+        btn_pct.grid(row=0, column=3, sticky="nsew", padx=3, pady=3)
 
-        # Linha 1: 7, 8, 9, *
+        # Linha 1: 7, 8, 9, ÷
         self._create_num_button(pad_frame, "7", 1, 0)
         self._create_num_button(pad_frame, "8", 1, 1)
         self._create_num_button(pad_frame, "9", 1, 2)
-        btn_mul = self._create_button(pad_frame, "×", lambda: self._on_operator("*"), "#89b4fa", "#11111b")
-        btn_mul.grid(row=1, column=3, sticky="nsew", padx=3, pady=3)
+        btn_div = self._create_button(pad_frame, "÷", lambda: self._on_operator("/"), "#89b4fa", "#11111b")
+        btn_div.grid(row=1, column=3, sticky="nsew", padx=3, pady=3)
 
-        # Linha 2: 4, 5, 6, -
+        # Linha 2: 4, 5, 6, ×
         self._create_num_button(pad_frame, "4", 2, 0)
         self._create_num_button(pad_frame, "5", 2, 1)
         self._create_num_button(pad_frame, "6", 2, 2)
-        btn_sub = self._create_button(pad_frame, "−", lambda: self._on_operator("-"), "#89b4fa", "#11111b")
-        btn_sub.grid(row=2, column=3, sticky="nsew", padx=3, pady=3)
+        btn_mul = self._create_button(pad_frame, "×", lambda: self._on_operator("*"), "#89b4fa", "#11111b")
+        btn_mul.grid(row=2, column=3, sticky="nsew", padx=3, pady=3)
 
-        # Linha 3: 1, 2, 3, +
+        # Linha 3: 1, 2, 3, −
         self._create_num_button(pad_frame, "1", 3, 0)
         self._create_num_button(pad_frame, "2", 3, 1)
         self._create_num_button(pad_frame, "3", 3, 2)
-        btn_add = self._create_button(pad_frame, "+", lambda: self._on_operator("+"), "#89b4fa", "#11111b")
-        btn_add.grid(row=3, column=3, sticky="nsew", padx=3, pady=3)
+        btn_sub = self._create_button(pad_frame, "−", lambda: self._on_operator("-"), "#89b4fa", "#11111b")
+        btn_sub.grid(row=3, column=3, sticky="nsew", padx=3, pady=3)
 
-        # Linha 4: +/-, 0, ., ENTER
+        # Linha 4: ±, 0, ., +
         btn_sign = self._create_button(pad_frame, "±", self._on_toggle_sign, "#45475a", self.text_color)
         btn_sign.grid(row=4, column=0, sticky="nsew", padx=3, pady=3)
 
@@ -593,11 +617,15 @@ class RPNCalculatorGUI:
         btn_dot = self._create_button(pad_frame, ".", self._on_dot, "#45475a", self.text_color)
         btn_dot.grid(row=4, column=2, sticky="nsew", padx=3, pady=3)
 
+        btn_add = self._create_button(pad_frame, "+", lambda: self._on_operator("+"), "#89b4fa", "#11111b")
+        btn_add.grid(row=4, column=3, sticky="nsew", padx=3, pady=3)
+
+        # Linha 5: ENTER ↵ (botão amplo com destaque)
         btn_enter = self._create_button(pad_frame, "ENTER ↵", self._on_enter, "#a6e3a1", "#11111b", bold=True)
-        btn_enter.grid(row=4, column=3, sticky="nsew", padx=3, pady=3)
+        btn_enter.grid(row=5, column=0, columnspan=4, sticky="nsew", padx=3, pady=3)
 
         # Configura proporção das linhas do teclado
-        for row in range(5):
+        for row in range(6):
             pad_frame.rowconfigure(row, weight=1)
 
     def _create_button(
@@ -650,6 +678,7 @@ class RPNCalculatorGUI:
         self.root.bind("-", lambda e: (self._on_operator("-"), "break")[1])
         self.root.bind("*", lambda e: (self._on_operator("*"), "break")[1])
         self.root.bind("/", lambda e: (self._on_operator("/"), "break")[1])
+        self.root.bind("%", lambda e: (self._on_percent(), "break")[1])
         self.root.bind("<BackSpace>", lambda e: (self._on_backspace(), "break")[1])
         self.root.bind("<Escape>", lambda e: (self._on_clear(), "break")[1])
 
@@ -728,6 +757,26 @@ class RPNCalculatorGUI:
         except ZeroDivisionError as err:
             self._play_sound("error")
             self.status_var.set(f"Aviso: {err}")
+        except Exception as err:
+            self._play_sound("error")
+            self.status_var.set(f"Erro: {err}")
+
+    def _on_percent(self) -> None:
+        """Calcula porcentagem: L1 = (L2 * L1) / 100 mantendo L2 como base, ou L1 / 100 se L2 for zero."""
+        self.is_entering_number = False
+        self.current_entry = ""
+        try:
+            val_x = self.stack.get_level(1)
+            val_y = self.stack.get_level(2)
+            res = self.stack.percent()
+            self._play_sound("op")
+            self._refresh_display()
+            if val_y != 0.0:
+                self.status_var.set(
+                    f"Porcentagem: {self._format_number(val_x)}% de {self._format_number(val_y)} = {self._format_number(res)} (Base em L2)"
+                )
+            else:
+                self.status_var.set(f"Porcentagem: {self._format_number(val_x)}% = {self._format_number(res)}")
         except Exception as err:
             self._play_sound("error")
             self.status_var.set(f"Erro: {err}")
@@ -985,6 +1034,41 @@ def test_drop_and_clear():
 
     stack.clear()
     assert stack.levels == [0.0, 0.0, 0.0, 0.0, 0.0]
+
+
+def test_percent_with_base_value():
+    """Testa 200 [ENTER] 15 [%] = 30, mantendo 200 no Nível 2."""
+    stack = RPNStack()
+    stack.push(200)
+    stack.push(15)
+    result = stack.percent()
+    assert result == 30.0
+    assert stack.get_level(1) == 30.0
+    assert stack.get_level(2) == 200.0
+    # Soma acréscimo
+    total = stack.execute_op("+")
+    assert total == 230.0
+    assert stack.get_level(1) == 230.0
+
+
+def test_percent_discount():
+    """Testa cálculo de desconto: 200 [ENTER] 15 [%] [-] = 170."""
+    stack = RPNStack()
+    stack.push(200)
+    stack.push(15)
+    stack.percent()
+    total = stack.execute_op("-")
+    assert total == 170.0
+    assert stack.get_level(1) == 170.0
+
+
+def test_percent_unary():
+    """Testa porcentagem unitária quando Nível 2 for zero: 75 [%] = 0.75."""
+    stack = RPNStack()
+    stack.push(75)
+    result = stack.percent()
+    assert result == 0.75
+    assert stack.get_level(1) == 0.75
 `
   },
   {

@@ -93,6 +93,30 @@ class RPNStack:
         self._levels = [result] + self._levels[2:] + [0.0]
         return result
 
+    def percent(self) -> float:
+        """
+        Calcula a porcentagem segundo a convenção clássica RPN (HP):
+        - Nível 2 (Y) é o valor base.
+        - Nível 1 (X) é a taxa percentual.
+        - Resultado = (Y * X) / 100.0.
+        
+        O resultado é colocado no Nível 1 (X), mantendo o Nível 2 (Y) preservado.
+        Isso permite pressionar imediatamente [+] para somar acréscimo (ex: taxa/imposto)
+        ou [-] para subtrair desconto.
+        
+        Se o Nível 2 for 0.0, calcula a taxa unitária (X / 100.0).
+        """
+        val_x = self.get_level(1)
+        val_y = self.get_level(2)
+
+        if val_y != 0.0:
+            result = (val_y * val_x) / 100.0
+        else:
+            result = val_x / 100.0
+
+        self.set_level_1(result)
+        return result
+
     def enter(self) -> None:
         """
         Tecla ENTER: duplica o valor do Nível 1 para o Nível 2,
